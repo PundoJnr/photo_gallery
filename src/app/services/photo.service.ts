@@ -13,44 +13,45 @@ const { Camera, Filesystem, Storage } = Plugins;
 export class PhotoService {
 
   public photos: Photo[] = [];
+  private PHOTO_STORAGE: string = "photos";
 
   private async savePicture(cameraPhoto: CameraPhoto) {
-      //convert photo to base 64 format
-      const base64Data = await this.readAsBase64(cameraPhoto);
+    //convert photo to base 64 format
+    const base64Data = await this.readAsBase64(cameraPhoto);
 
-      //write the file to the data directory
-      const fileName = new Date().getTime()+'.jpeg';
-      await Filesystem.writeFile({
-        path: fileName,
-        data: base64Data,
-        directory: FilesystemDirectory.Data
-      });
+    //write the file to the data directory
+    const fileName = new Date().getTime() + '.jpeg';
+    await Filesystem.writeFile({
+      path: fileName,
+      data: base64Data,
+      directory: FilesystemDirectory.Data
+    });
 
-      return await this.getPhotoFile(cameraPhoto, fileName);
-   }
+    return await this.getPhotoFile(cameraPhoto, fileName);
+  }
 
-   private async readAsBase64(cameraPhoto: CameraPhoto){
-     const response = await fetch(cameraPhoto.webPath);
-     const blob = await response.blob();
+  private async readAsBase64(cameraPhoto: CameraPhoto) {
+    const response = await fetch(cameraPhoto.webPath);
+    const blob = await response.blob();
 
-     return await this.convertBlobToBase64(blob) as string;
-   }
+    return await this.convertBlobToBase64(blob) as string;
+  }
 
-   convertBlobToBase64 = (blob: Blob) => new Promise((resolve, reject)=>{
-     const reader = new FileReader;
-     reader.onerror = reject;
-     reader.onload = () =>{
-       resolve(reader.result);
-     };
-     reader.readAsDataURL(blob);
-   });
-   private async getPhotoFile(cameraPhoto: CameraPhoto, fileName: String
-    ): Promise<Photo>{
-   return{
-     filepath: fileName,
-     webviewPath:cameraPhoto.webPath
-   };
-   }
+  convertBlobToBase64 = (blob: Blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader;
+    reader.onerror = reject;
+    reader.onload = () => {
+      resolve(reader.result);
+    };
+    reader.readAsDataURL(blob);
+  });
+  private async getPhotoFile(cameraPhoto: CameraPhoto, fileName: string
+  ): Promise<Photo> {
+    return {
+      filepath: fileName,
+      webviewPath: cameraPhoto.webPath
+    };
+  }
   public async addNewToGallery() {
     //take picture
     const capturedPhoto = await Camera.getPhoto({
@@ -58,20 +59,43 @@ export class PhotoService {
       source: CameraSource.Camera,//automatically take a new photo with the camera
       quality: 100 // photo quality is 0-100
     });
-        //save picture to photo collection
-        const savedImageFile = await this.savePicture(capturedPhoto);
-        this.photos.unshift(savedImageFile);
+    //save picture to photo collection
+    const savedImageFile = await this.savePicture(capturedPhoto);
+    this.photos.unshift(savedImageFile);
 
     this.photos.unshift({
       filepath: "soon...",
       webviewPath: capturedPhoto.webPath
     })
 
+    Storage.set({
+      key: this.PHOTO_STORAGE,
+      value: JSON.stringify(this.photos.map(p => {
+        const photoCopy = { ...p };
+        delete photoCopy.base64;
+
+        return photoCopy;
+      }))
+    });
+
+  }
+  public async loadSaved() {
+    const photos = await Storage.get({ key: this.PHOTO_STORAGE });
+    this.photos = JSON.parse(photos.value) || [];
+
+    for (let photo of this.photos) {
+      //read each saved photo from filesystem
+      const readFile = await Filesystem.readFile({
+        path: photo.filepath,
+        directory: FilesystemDirectory.Data
+      });
+    }
   }
   constructor() { }
+
 }
 interface Photo {
-  filepath: String;
+  filepath: string;
   webviewPath: String;
   base64?: String;
 }
